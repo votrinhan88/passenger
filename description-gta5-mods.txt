@@ -1,0 +1,23 @@
+<b>passenger</b>
+<b>Passenger Mod for GTA V</b> | v1.0 | <a href="https://github.com/votrinhan88/passenger">GitHub</a>
+
+<b>Features</b>
+Another attempt to make a Passenger mod! Existing mods are buggy/outdated so I decided to step up,
++ Press G to enter nearest vehicle as Passenger (auto warp in 5 seconds).
++ Once inside vehicle:
+____+ Press G to cycle between empty seats.
+____+ Now here's the <b>FUN</b> thing: Switch to first-person, and <b>press G while aiming at the driver</b> to make him go vrooommmmm and threaten peds in vehicle (so that they don't run away).
++ Key are customizable via .ini
+
+<b>Installation</b>
+1. Requires the latest version of SHVDN-nightly ≥ v3.7.0-nightly.16.
+2. Put `Passenger.dll` and `Passenger.pcb` in `GTA V/scripts/`.
+3. The `Passenger.ini` settings file will be automatically generated after the first run.
+
+<b>Uninstallation</b>
+1. Delete `Passenger.dll` and `Passenger.pcb` in `GTA V/scripts/`.
+
+<b>Disclaimer</b>
++ Do not upload elsewhere. Do not used for commercial, financial, or personal gain.
++ Very early version - Have only tested minimally on cars/trucks/motorbikes on highway! Do expect some bugs and tell me if so!
++ Leave comments if you have any ideas!

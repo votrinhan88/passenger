@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+	  <LangVersion>10.0</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <ProjectGuid>45868815-c5e3-44ee-ac7d-6afbd58bb474</ProjectGuid>
+    <RootNamespace>Passenger</RootNamespace>
+    <AssemblyName>Passenger</AssemblyName>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="ScriptHookVDotNet3">
+      <HintPath>..\libs\ScriptHookVDotNet3.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Verbosity.cs" />
+    <Compile Include="DevUtils.cs" />
+    <Compile Include="Passenger.cs" />
+    <Compile Include="properties\AssemblyInfo.cs" />
+  </ItemGroup>
+</Project>
