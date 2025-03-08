@@ -191,6 +191,8 @@ public class Passenger : Script
                 if (player.IsAiming == true)
                 {
                     ThreatenOccupants();
+                    Ped driver = player.CurrentVehicle.Driver;
+                    MakeDriverDriveOrCruise(driver);
                     MakeDriverReckless(player.CurrentVehicle.GetPedOnSeat(VehicleSeat.Driver));
                 }
                 else
@@ -399,14 +401,20 @@ public class Passenger : Script
         bool notify = false;
         foreach (Ped ped in player.CurrentVehicle.Occupants)
         {
-            if (ped != player)
+            if (ped == player) {
+                continue;
+            }
+
+            ped.PlayAmbientSpeech("GENERIC_FRIGHTENED_HIGH", SpeechModifier.ShoutedCritical);
+            ped.SetFleeAttributes((
+                FleeAttributes.CanScream
+                | FleeAttributes.DisableExitVehicle
+            ), true);
+
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
             {
-                if (notify == false)
+                if (!notify)
                 {
-                    ped.SetFleeAttributes((
-                        FleeAttributes.CanScream
-                        | FleeAttributes.DisableExitVehicle
-                    ), true);
                     Notification.PostTicker($"Peds threatened not to leave vehficle.", true);
                     notify = true;
                 }
@@ -416,37 +424,58 @@ public class Passenger : Script
 
     private void MakeDriverReckless(Ped driver)
     {
-        if (driver != null)
+        if (driver == null) { return; }
+        if (!driver.IsAlive) { return; }
+        if (driver == player) { return; }
+        
+        driver.VehicleDrivingFlags = ((
+            VehicleDrivingFlags.SwerveAroundAllVehicles
+            | VehicleDrivingFlags.SteerAroundStationaryVehicles
+            | VehicleDrivingFlags.SteerAroundPeds
+            | VehicleDrivingFlags.SteerAroundObjects
+            | VehicleDrivingFlags.DontSteerAroundPlayerPed
+            | VehicleDrivingFlags.GoOffRoadWhenAvoiding
+            | VehicleDrivingFlags.UseShortCutLinks
+            | VehicleDrivingFlags.ChangeLanesAroundObstructions
+        ));
+        driver.SetConfigFlag(PedConfigFlagToggles.IsAgitated, true);
+        driver.SetFleeAttributes(FleeAttributes.UseVehicle, true);
+        driver.SetCombatAttribute(CombatAttributes.FleeWhilstInVehicle, true);
+        driver.DrivingAggressiveness = 1.0f;
+        driver.DrivingSpeed = 9999f;
+        driver.MaxDrivingSpeed = 9999f;
+        if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
         {
-            if (driver.IsAlive & (driver != player))
-            {
-                // driver.Task.ClearAll();
-                // Alternative: FunctionCall Hash.TASK_SMART_FLEE_PED
-                driver.VehicleDrivingFlags = (
-                    VehicleDrivingFlags.SwerveAroundAllVehicles
-                    | VehicleDrivingFlags.SteerAroundStationaryVehicles
-                    | VehicleDrivingFlags.SteerAroundPeds
-                    | VehicleDrivingFlags.SteerAroundObjects
-                    | VehicleDrivingFlags.DontSteerAroundPlayerPed
-                    | VehicleDrivingFlags.GoOffRoadWhenAvoiding
-                    | VehicleDrivingFlags.UseShortCutLinks
-                    | VehicleDrivingFlags.ChangeLanesAroundObstructions
-                );
-                driver.DrivingAggressiveness = 1.0f;
-                driver.DrivingSpeed = 9999f;
-                driver.MaxDrivingSpeed = 9999f;
-                driver.SetCombatAttribute(CombatAttributes.UseVehicleAttack, true);
-                driver.SetCombatAttribute(CombatAttributes.FleeWhilstInVehicle, true);
-                driver.SetFleeAttributes(FleeAttributes.UseVehicle, true);
-                Notification.PostTicker($"Driver became reckless.", true);
+            Notification.PostTicker($"Driver became reckless.", true);
+        }
+    }
 
-                // TO consider
-                driver.SetConfigFlag(PedConfigFlagToggles.CanBeIncapacitated, true);
-                driver.SetConfigFlag(PedConfigFlagToggles.IsAgitated, true);
-                // WillFollowLeaderAnyMeans
-                // CanBeAgitated
+    private void MakeDriverDriveOrCruise(Ped driver) {
+        VehicleDrivingFlags drivingFlags = (
+            VehicleDrivingFlags.SwerveAroundAllVehicles
+            | VehicleDrivingFlags.SteerAroundStationaryVehicles
+            | VehicleDrivingFlags.SteerAroundPeds
+            | VehicleDrivingFlags.SteerAroundObjects
+            | VehicleDrivingFlags.DontSteerAroundPlayerPed
+            | VehicleDrivingFlags.GoOffRoadWhenAvoiding
+            | VehicleDrivingFlags.UseShortCutLinks
+            | VehicleDrivingFlags.ChangeLanesAroundObstructions
+        );
+        driver.PlayAmbientSpeech("GENERIC_FRIGHTENED_HIGH", SpeechModifier.ShoutedCritical);
+
+        driver.Task.ClearAll();
+        TaskSequence taskSequence = new TaskSequence(
+        );
+        if (Game.IsWaypointActive)
+        {
+            taskSequence.AddTask.DriveTo(driver.CurrentVehicle, World.WaypointPosition, 9999f, drivingFlags, 10f);
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+            {
+                Notification.PostTicker($"Driver going to Waypoint.", true);
             }
         }
+        taskSequence.AddTask.CruiseWithVehicle(driver.CurrentVehicle, 9999f, drivingFlags);
+        driver.Task.PerformSequence(taskSequence);
     }
 
     private VehicleSeat FindFirstFreePassengerSeat(Vehicle vehicle)
