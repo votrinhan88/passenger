@@ -7,7 +7,7 @@ using GTA.Native;
 public class Passenger : Script
 {
     // CONSTRUCTOR /////////////////////////////////////////////////////////////
-    public static readonly Dictionary<string, object> metadata = new Dictionary<string, object>
+    public static readonly Dictionary<string, string> metadata = new Dictionary<string, string>
     {
         {"name",      "Passenger"},
         {"developer", "votrinhan88"},
@@ -32,7 +32,7 @@ public class Passenger : Script
             }
         },
     };
-    private ScriptSettings settings;
+    private Dictionary<string, Dictionary<string, object>> settings = new Dictionary<string, Dictionary<string, object>>();
     private static Keys keyPassenger;
     public Passenger()
     {
@@ -41,26 +41,47 @@ public class Passenger : Script
             defaultSettingsDict,
             (int)defaultSettingsDict["SETTINGS"]["verbose"]
         );
-        this.settings = DevUtils.LoadSettings(
+        ScriptSettings loadedsettings = DevUtils.LoadSettings(
             (string)metadata["iniPath"],
             defaultSettingsDict,
             (int)defaultSettingsDict["SETTINGS"]["verbose"]
         );
-        this.settings.Save();
-        if (this.settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"~b~{metadata["name"]} ~g~{metadata["version"]}~w~ has been loaded.", true); }
+        loadedsettings.Save();
+        InitSettings(loadedsettings);
 
         // Config keyPassenger
-        string keyPassengerString = (string)this.settings.GetValue("SETTINGS", "keyPassenger", defaultSettingsDict["SETTINGS"]["keyPassenger"]);
+        string keyPassengerString = (string)this.settings["SETTINGS"]["keyPassenger"];
         if (Enum.TryParse(keyPassengerString, out Keys _keyPassenger))
         {
             keyPassenger = _keyPassenger;
-            if (this.settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"keyPassenger set to {keyPassenger}.", true); }
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+            {
+                Notification.PostTicker($"keyPassenger set to {keyPassenger}.", true);
+            }
         }
 
         Tick += OnTick;
         KeyDown += OnKeyDown;
-        Interval = this.settings.GetValue("SETTINGS", "Interval", (int)defaultSettingsDict["SETTINGS"]["Interval"]);
+        Interval = (int)this.settings["SETTINGS"]["Interval"];
+    }
 
+    private Dictionary<string, Dictionary<string, object>> InitSettings(ScriptSettings scriptSettings)
+    {
+        foreach (string sectionName in scriptSettings.GetAllSectionNames())
+        {
+            this.settings.Add(sectionName, new Dictionary<string, object>());
+            foreach (string keyName in scriptSettings.GetAllKeyNames(sectionName))
+            {   
+                Type type = defaultSettingsDict[sectionName][keyName].GetType();
+                this.settings[sectionName].Add(keyName, Convert.ChangeType(scriptSettings.GetValue(sectionName, keyName, defaultSettingsDict[sectionName][keyName]), type));
+            }
+        }
+
+        if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+        {
+            Notification.PostTicker($"~b~{metadata["name"]} ~g~{metadata["version"]}~w~ has been loaded.", true);
+        }
+        return settings;
     }
 
 
@@ -235,12 +256,12 @@ public class Passenger : Script
                     break;
             }
         }
-    
+
         if (e.KeyCode == Keys.J)
         {
             if (player.IsInVehicle())
             {
-                player.CurrentVehicle.Velocity = 1.5f*player.CurrentVehicle.Velocity;
+                player.CurrentVehicle.Velocity = 1.5f * player.CurrentVehicle.Velocity;
             }
         }
     }
@@ -291,15 +312,15 @@ public class Passenger : Script
                 }
             }
         }
-        GTA.UI.Screen.ShowSubtitle(subtitle, this.settings.GetValue("SETTINGS", "Interval", (int)defaultSettingsDict["SETTINGS"]["Interval"]));
+        GTA.UI.Screen.ShowSubtitle(subtitle, (int)this.settings["SETTINGS"]["Interval"]);
     }
 
 
     // PASSENGER ///////////////////////////////////////////////////////////////
     private void EnterClosestVehicleAsPassenger()
     {
-        var distanceClosestVehicle = this.settings.GetValue("PARAMETERS", "distanceClosestVehicle", (float)defaultSettingsDict["PARAMETERS"]["distanceClosestVehicle"]);
-        var timeoutEnterVehicle = this.settings.GetValue("PARAMETERS", "timeoutEnterVehicle", (int)defaultSettingsDict["PARAMETERS"]["timeoutEnterVehicle"]);
+        float distanceClosestVehicle = (float)this.settings["PARAMETERS"]["distanceClosestVehicle"];
+        int timeoutEnterVehicle = (int)this.settings["PARAMETERS"]["timeoutEnterVehicle"];
         Ped player = Game.Player.Character;
         Vehicle closestVehicle = World.GetClosestVehicle(player.Position, distanceClosestVehicle);
 
@@ -328,7 +349,10 @@ public class Passenger : Script
                 enterVehicleFlags
             );
 
-            if (this.settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"Enter seat {bestSeat}.", true); }
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+            {
+                Notification.PostTicker($"Enter seat {bestSeat}.", true);
+            }
         }
     }
 
@@ -337,7 +361,10 @@ public class Passenger : Script
         Vehicle vehicle = player.CurrentVehicle;
         if ((vehicle.GetPedOnSeat(VehicleSeat.Driver) != null) && (vehicle.PassengerCount == vehicle.PassengerCapacity))
         {
-            if (this.settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.WARNING) { Notification.PostTicker("No free seat available.", true); }
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.WARNING)
+            {
+                Notification.PostTicker("No free seat available.", true);
+            }
         }
 
         var idxCurrentSeat = (int)player.SeatIndex;
@@ -358,7 +385,10 @@ public class Passenger : Script
             if (vehicle.IsSeatFree((VehicleSeat)idxNextSeat))
             {
                 player.Task.WarpIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
-                if (this.settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"Switch to {(VehicleSeat)idxNextSeat}.", true); }
+                if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+                {
+                    Notification.PostTicker($"Switch to {(VehicleSeat)idxNextSeat}.", true);
+                }
                 return;
             }
         }
@@ -634,22 +664,26 @@ public class Passenger : Script
                 }
             }
         }
-        else {
+        else
+        {
             // Check: Door is not null
-            if (this.doorToBreachIndex == (VehicleDoorIndex)(-1)) {
+            if (this.doorToBreachIndex == (VehicleDoorIndex)(-1))
+            {
                 Notification.PostTicker($"modState={modState}: No door to breach.", true);
                 return ModState.Unknown;
             }
             // Check: Seat is not null
-            if (this.seatToBreach == VehicleSeat.None) {
+            if (this.seatToBreach == VehicleSeat.None)
+            {
                 Notification.PostTicker($"modState={modState}: No seat to breach.", true);
                 return ModState.Unknown;
             }
         }
-        
+
         // Attempt to open door (again?)
         VehicleDoor doorToBreach = vehicle.Doors[this.doorToBreachIndex];
-        if (doorToBreach.IsOpen == false) {
+        if (doorToBreach.IsOpen == false)
+        {
             doorToBreach.Open(true, false);
         }
 
@@ -705,11 +739,11 @@ public class Passenger : Script
         vehicle.SetShouldFreezeWaitingOnCollision(false);
         for (int i = 0; i < 20; i++)
         {
-            vehicle.LocalRotationVelocity *= -0.5f; 
+            vehicle.LocalRotationVelocity *= -0.5f;
             Vector3 speedDifference = (vehicleVelocity - vehicle.Velocity);
             speedDifference.Z *= -0.5f;
-            vehicle.Velocity = vehicle.Velocity + 0.3f*speedDifference; 
-            vehicle.ApplyWorldForceCenterOfMass(0.3f*speedDifference, ForceType.InternalImpulse, true, true);
+            vehicle.Velocity = vehicle.Velocity + 0.3f * speedDifference;
+            vehicle.ApplyWorldForceCenterOfMass(0.3f * speedDifference, ForceType.InternalImpulse, true, true);
             Script.Wait(50);
         }
         // Hash.SMASH_VEHICLE_WINDOW
