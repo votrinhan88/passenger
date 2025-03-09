@@ -4,12 +4,12 @@ using GTA.UI;
 
 public class Passenger : Script
 {
-    // Define a static readonly dictionary
-    public static readonly Dictionary<string, object> metadata = new Dictionary<string, object>
+    // CONSTRUCTOR /////////////////////////////////////////////////////////////
+    public static readonly Dictionary<string, string> metadata = new Dictionary<string, string>
     {
-        {"name",      "Drive Me By"},
+        {"name",      "Passenger"},
         {"developer", "votrinhan88"},
-        {"version",   "1.0"},
+        {"version",   "1.1"},
         {"iniPath",   @"scripts\Passenger.ini"}
     };
     private static readonly Dictionary<string, Dictionary<string, object>> defaultSettingsDict = new Dictionary<string, Dictionary<string, object>>
@@ -30,11 +30,8 @@ public class Passenger : Script
             }
         },
     };
-
-    private ScriptSettings settings;
+    private Dictionary<string, Dictionary<string, object>> settings = new Dictionary<string, Dictionary<string, object>>();
     private static Keys keyPassenger;
-    private static Ped player => Game.Player.Character;
-
 
     public Passenger()
     {
@@ -43,26 +40,51 @@ public class Passenger : Script
             defaultSettingsDict,
             (int)defaultSettingsDict["SETTINGS"]["verbose"]
         );
-        settings = DevUtils.LoadSettings(
+        ScriptSettings loadedsettings = DevUtils.LoadSettings(
             (string)metadata["iniPath"],
             defaultSettingsDict,
             (int)defaultSettingsDict["SETTINGS"]["verbose"]
         );
-        settings.Save();
-        if (settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"~b~{metadata["name"]} ~g~{metadata["version"]}~w~ has been loaded.", true); }
+        loadedsettings.Save();
+        InitSettings(loadedsettings);
 
         // Config keyPassenger
-        string keyPassengerString = (string)settings.GetValue("SETTINGS", "keyPassenger", defaultSettingsDict["SETTINGS"]["keyPassenger"]);
+        string keyPassengerString = (string)this.settings["SETTINGS"]["keyPassenger"];
         if (Enum.TryParse(keyPassengerString, out Keys _keyPassenger))
         {
             keyPassenger = _keyPassenger;
-            if (settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"keyPassenger set to {keyPassenger}.", true); }
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+            {
+                Notification.PostTicker($"keyPassenger set to {keyPassenger}.", true);
+            }
         }
 
         KeyDown += OnKeyDown;
-        Interval = settings.GetValue("SETTINGS", "Interval", (int)defaultSettingsDict["SETTINGS"]["Interval"]);
+        Interval = (int)this.settings["SETTINGS"]["Interval"];
     }
 
+    private Dictionary<string, Dictionary<string, object>> InitSettings(ScriptSettings scriptSettings)
+    {
+        foreach (string sectionName in scriptSettings.GetAllSectionNames())
+        {
+            this.settings.Add(sectionName, new Dictionary<string, object>());
+            foreach (string keyName in scriptSettings.GetAllKeyNames(sectionName))
+            {   
+                Type type = defaultSettingsDict[sectionName][keyName].GetType();
+                this.settings[sectionName].Add(keyName, Convert.ChangeType(scriptSettings.GetValue(sectionName, keyName, defaultSettingsDict[sectionName][keyName]), type));
+            }
+        }
+
+        if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+        {
+            Notification.PostTicker($"~b~{metadata["name"]} ~g~{metadata["version"]}~w~ has been loaded.", true);
+        }
+        return settings;
+    }
+
+
+    // VARIABLES ///////////////////////////////////////////////////////////////
+    private static Ped player => Game.Player.Character;
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
@@ -70,62 +92,75 @@ public class Passenger : Script
         {
             if (player.IsInVehicle() == false)
             {
-                EnterNearestVehicleAsPassenger();
+                EnterClosestVehicleAsPassenger();
             }
             else
             {
-                if (player.IsAiming == true) {
+                if (player.IsAiming == true)
+                {
                     ThreatenOccupants();
-                    MakeDriverReckless();
+                    Ped driver = player.CurrentVehicle.Driver;
+                    MakeDriverDriveOrCruise(driver);
+                    MakeDriverReckless(driver);
                 }
-                else {
-                    CycleSeatsWhileOnVehicle();
+                else
+                {
+                    CycleFreeSeatsWhileOnVehicle();
                 }
             }
         }
     }
 
-    private void EnterNearestVehicleAsPassenger()
-    {
-        var distanceClosestVehicle = settings.GetValue("PARAMETERS", "distanceClosestVehicle", (float)defaultSettingsDict["PARAMETERS"]["distanceClosestVehicle"]);
-        var timeoutEnterVehicle = settings.GetValue("PARAMETERS", "timeoutEnterVehicle", (int)defaultSettingsDict["PARAMETERS"]["timeoutEnterVehicle"]);
-        Ped player = Game.Player.Character;
-        Vehicle nearestVehicle = World.GetClosestVehicle(player.Position, distanceClosestVehicle);
 
-        if (nearestVehicle != null && nearestVehicle.IsDriveable)
+    // PASSENGER ///////////////////////////////////////////////////////////////
+    private void EnterClosestVehicleAsPassenger()
+    {
+        float distanceClosestVehicle = (float)this.settings["PARAMETERS"]["distanceClosestVehicle"];
+        int timeoutEnterVehicle = (int)this.settings["PARAMETERS"]["timeoutEnterVehicle"];
+        Ped player = Game.Player.Character;
+        Vehicle closestVehicle = World.GetClosestVehicle(player.Position, distanceClosestVehicle);
+
+        if (closestVehicle != null && closestVehicle.IsDriveable)
         {
-            VehicleSeat? freeSeat = FindFreePassengerSeat(nearestVehicle);
-            if (freeSeat == null)
+            EnterVehicleFlags enterVehicleFlags;
+            VehicleSeat bestSeat;
+
+            VehicleSeat freeSeat = FindFirstFreePassengerSeat(closestVehicle);
+            if (freeSeat == VehicleSeat.None)
             {
-                player.Task.EnterVehicle(
-                    nearestVehicle,
-                    VehicleSeat.Passenger,
-                    timeoutEnterVehicle,
-                    2f,
-                    EnterVehicleFlags.None
-                );
+                bestSeat = VehicleSeat.Passenger;
+                enterVehicleFlags = EnterVehicleFlags.None;
             }
             else
             {
-                player.Task.EnterVehicle(
-                    nearestVehicle,
-                    freeSeat ?? VehicleSeat.None,
-                    timeoutEnterVehicle,
-                    2f,
-                    EnterVehicleFlags.DontJackAnyone
-                );
+                bestSeat = freeSeat;
+                enterVehicleFlags = EnterVehicleFlags.DontJackAnyone;
             }
 
-            if (settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"Enter seat {freeSeat ?? VehicleSeat.Passenger}.", true); }
+            player.Task.EnterVehicle(
+                closestVehicle,
+                bestSeat,
+                timeoutEnterVehicle,
+                2f,
+                enterVehicleFlags
+            );
+
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+            {
+                Notification.PostTicker($"Enter seat {bestSeat}.", true);
+            }
         }
     }
 
-    private void CycleSeatsWhileOnVehicle()
+    private void CycleFreeSeatsWhileOnVehicle()
     {
         Vehicle vehicle = player.CurrentVehicle;
         if ((vehicle.GetPedOnSeat(VehicleSeat.Driver) != null) && (vehicle.PassengerCount == vehicle.PassengerCapacity))
         {
-            if (settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.WARNING) { Notification.PostTicker("No free seat available.", true); }
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.WARNING)
+            {
+                Notification.PostTicker("No free seat available.", true);
+            }
         }
 
         var idxCurrentSeat = (int)player.SeatIndex;
@@ -146,7 +181,10 @@ public class Passenger : Script
             if (vehicle.IsSeatFree((VehicleSeat)idxNextSeat))
             {
                 player.Task.WarpIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
-                if (settings.GetValue("SETTINGS", "verbose", 0) >= Verbosity.INFO) { Notification.PostTicker($"Switch to {(VehicleSeat)idxNextSeat}.", true); }
+                if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+                {
+                    Notification.PostTicker($"Switch to {(VehicleSeat)idxNextSeat}.", true);
+                }
                 return;
             }
         }
@@ -157,10 +195,19 @@ public class Passenger : Script
         bool notify = false;
         foreach (Ped ped in player.CurrentVehicle.Occupants)
         {
-            if (ped != player)
+            if (ped == player) {
+                continue;
+            }
+
+            ped.PlayAmbientSpeech("GENERIC_FRIGHTENED_HIGH", SpeechModifier.ShoutedCritical);
+            ped.SetFleeAttributes((
+                FleeAttributes.CanScream
+                | FleeAttributes.DisableExitVehicle
+            ), true);
+
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
             {
-                ped.BlockPermanentEvents = true;
-                if (notify == false)
+                if (!notify)
                 {
                     Notification.PostTicker($"Peds threatened not to leave vehficle.", true);
                     notify = true;
@@ -169,30 +216,65 @@ public class Passenger : Script
         }
     }
 
-    private void MakeDriverReckless()
-    {
-        Ped driver = player.CurrentVehicle.GetPedOnSeat(VehicleSeat.Driver);
-        if (driver != null)
+    private void MakeDriverDriveOrCruise(Ped driver) {
+        VehicleDrivingFlags drivingFlags = (
+            VehicleDrivingFlags.SwerveAroundAllVehicles
+            | VehicleDrivingFlags.SteerAroundStationaryVehicles
+            | VehicleDrivingFlags.SteerAroundPeds
+            | VehicleDrivingFlags.SteerAroundObjects
+            | VehicleDrivingFlags.DontSteerAroundPlayerPed
+            | VehicleDrivingFlags.GoOffRoadWhenAvoiding
+            | VehicleDrivingFlags.UseShortCutLinks
+            | VehicleDrivingFlags.ChangeLanesAroundObstructions
+        );
+        driver.PlayAmbientSpeech("GENERIC_FRIGHTENED_HIGH", SpeechModifier.ShoutedCritical);
+
+        driver.Task.ClearAll();
+        TaskSequence taskSequence = new TaskSequence(
+        );
+        if (Game.IsWaypointActive)
         {
-            if (driver.IsAlive & (driver != player))
+            taskSequence.AddTask.DriveTo(driver.CurrentVehicle, World.WaypointPosition, 9999f, drivingFlags, 10f);
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
             {
-                driver.Task.ClearAll();
-                driver.Task.CruiseWithVehicle(driver.CurrentVehicle, 9999f, VehicleDrivingFlags.DrivingModeAvoidVehiclesReckless);
-                driver.DrivingAggressiveness = 1.0f;
-                driver.DrivingSpeed = 9999f;
-                driver.MaxDrivingSpeed = 9999f;
-                driver.SetCombatAttribute(CombatAttributes.UseVehicleAttack, true);
-                driver.SetCombatAttribute(CombatAttributes.FleeWhilstInVehicle, true);
-                driver.SetFleeAttributes(FleeAttributes.UseVehicle, true);
-                driver.SetFleeAttributes(FleeAttributes.CanScream, true);
-                Notification.PostTicker($"Driver became reckless.", true);
+                Notification.PostTicker($"Driver going to Waypoint.", true);
             }
+        }
+        taskSequence.AddTask.CruiseWithVehicle(driver.CurrentVehicle, 9999f, drivingFlags);
+        driver.Task.PerformSequence(taskSequence);
+    }
+
+    private void MakeDriverReckless(Ped driver)
+    {
+        if (driver == null) { return; }
+        if (!driver.IsAlive) { return; }
+        if (driver == player) { return; }
+        
+        driver.VehicleDrivingFlags = ((
+            VehicleDrivingFlags.SwerveAroundAllVehicles
+            | VehicleDrivingFlags.SteerAroundStationaryVehicles
+            | VehicleDrivingFlags.SteerAroundPeds
+            | VehicleDrivingFlags.SteerAroundObjects
+            | VehicleDrivingFlags.DontSteerAroundPlayerPed
+            | VehicleDrivingFlags.GoOffRoadWhenAvoiding
+            | VehicleDrivingFlags.UseShortCutLinks
+            | VehicleDrivingFlags.ChangeLanesAroundObstructions
+        ));
+        driver.SetConfigFlag(PedConfigFlagToggles.IsAgitated, true);
+        driver.SetFleeAttributes(FleeAttributes.UseVehicle, true);
+        driver.SetCombatAttribute(CombatAttributes.FleeWhilstInVehicle, true);
+        driver.DrivingAggressiveness = 1.0f;
+        driver.DrivingSpeed = 9999f;
+        driver.MaxDrivingSpeed = 9999f;
+        if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+        {
+            Notification.PostTicker($"Driver became reckless.", true);
         }
     }
 
-    private VehicleSeat? FindFreePassengerSeat(Vehicle vehicle)
+    private VehicleSeat FindFirstFreePassengerSeat(Vehicle vehicle)
     {
-        VehicleSeat? freeSeat = null;
+        VehicleSeat freeSeat = VehicleSeat.None;
         for (int i = 0; i < vehicle.PassengerCapacity + 1; i++)
         {
             if (vehicle.IsSeatFree((VehicleSeat)i))
