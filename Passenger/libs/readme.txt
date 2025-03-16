@@ -1,1 +1,1 @@
-ScriptHookVDotNet: v3.7.0-nightly.19
+ScriptHookVDotNet: v3.6.0-nightly.142
