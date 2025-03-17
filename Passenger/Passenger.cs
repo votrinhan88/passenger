@@ -26,8 +26,8 @@ public class Passenger : Script
             "PARAMETERS", new Dictionary<string, object>
             {
                 {"distanceClosestVehicle",   10.0f},
-                {"timeoutEnterVehicle",       5   },
                 {"timeoutAutoValidateMod",   10   },
+                {"timeoutEnterVehicle",       5   },
             }
         },
     };
@@ -141,8 +141,8 @@ public class Passenger : Script
         subtitle += $"modState: {this.modState}\n";
         if (this.targetVehicle != null)
             subtitle += $"targetVehicle: {this.targetVehicle}\n";
-        subtitle += $"timeAttemptedEnterVehicle (s): {(DateTime.Now - this.timeAttemptedEnterVehicle).Seconds}\n";
         subtitle += $"timeAutoValidateMod (s): {(DateTime.Now - this.timeAutoValidateMod).Seconds}\n";
+        subtitle += $"timeAttemptedEnterVehicle (s): {(DateTime.Now - this.timeAttemptedEnterVehicle).Seconds}\n";
         GTA.UI.Screen.ShowSubtitle(subtitle, (int)this.settings["SETTINGS"]["Interval"]);
     }
 
@@ -190,7 +190,6 @@ public class Passenger : Script
     private ModState AttemptEnterClosestVehicleAsPassenger()
     {
         float distanceClosestVehicle = (float)this.settings["PARAMETERS"]["distanceClosestVehicle"];
-        Ped player = Game.Player.Character;
         Vehicle candidateVehicle = World.GetClosestVehicle(player.Position, distanceClosestVehicle);
         this.timeAttemptedEnterVehicle = DateTime.Now;
 
@@ -212,7 +211,8 @@ public class Passenger : Script
         // Attempt to enter vehicle
         this.targetVehicle = candidateVehicle;
         EnterVehicleFlags enterVehicleFlags;
-        VehicleSeat bestSeat;
+        VehicleSeat bestSeat;float speed = 1f;
+        if (player.IsRunning | player.IsSprinting) speed = 2f;
 
         VehicleSeat freeSeat = FindFirstFreePassengerSeat(this.targetVehicle);
         if (freeSeat == VehicleSeat.None)
@@ -226,7 +226,13 @@ public class Passenger : Script
             enterVehicleFlags = EnterVehicleFlags.DontJackAnyone;
         }
 
-        player.Task.EnterVehicle(this.targetVehicle, bestSeat, -1, 2f, enterVehicleFlags);
+            player.Task.EnterVehicle(
+                this.targetVehicle,
+                bestSeat,
+                -1,
+                speed,
+                enterVehicleFlags
+            );
 
         if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
             Notification.PostTicker($"Attempt seat {bestSeat}.", true);
