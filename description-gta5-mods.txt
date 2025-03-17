@@ -1,9 +1,9 @@
 <b>passenger</b>
-<b>Passenger Mod for GTA V</b> | v1.1 | <a href="https://github.com/votrinhan88/passenger">GitHub</a>
+<b>Passenger Mod for GTA V</b> | v1.2 | <a href="https://github.com/votrinhan88/passenger">GitHub</a>
 
 <b>Features</b>
 Another attempt to make a Passenger mod! Existing mods are buggy/outdated so I decided to step up.
-+ Press G to enter nearest vehicle as Passenger (auto warp in 5 seconds).
++ Press G to enter nearest vehicle as Passenger.
 + Once inside vehicle:
 ____+ Press G to cycle between empty seats.
 ____+ Now here's the <b>FUN</b> thing: <b>Press G while aiming</b> to make threaten peds in vehicle (so that they don't run away) and make driver go vroommmmm. You'll know it when you hear them <b>scream</b>.
@@ -12,15 +12,16 @@ ____+ If you have a <b>>Marker</b>, the driver will drive you there. If he forge
 ____+ Set verbose = 3 if you want more messages.
 
 <b>Installation</b>
-1. Requires the latest version of SHVDN-nightly ≥ v3.7.0-nightly.19.
+1. Requires the latest version of SHVDN-nightly ≥ v3.6.0-nightly.142.
 2. Put `Passenger.dll`, `Passenger.pcb`, and `Passenger.ini` in `GTA V/scripts/`.
 3. The `Passenger.ini` settings file will be automatically generated again if deleted.
 
 <b>Changelog</b>
-+ v1.1:
-____+ Make Driver drive to destination if marker exists
-____+ Replace ped-threatening notifications with ambient screaming sounds
-____+ Add .ini file
++ v1.2:
+____+ Add timeout and distance checks to cancel fail enter attempts
+____+ Tune driver behavior (driver may continue driving if wanted)
+____+ Downgrade SHVDN (no changes needed)
++ Previous versions: <a href="https://github.com/votrinhan88/passenger">GitHub</a>
 
 <b>Uninstallation</b>
 1. Delete `Passenger.dll` and `Passenger.pcb` in `GTA V/scripts/`.
