@@ -1,5 +1,7 @@
 ﻿using System.Windows.Forms;
+using System.Windows.Forms.VisualStyles;
 using GTA;
+using GTA.Math;
 using GTA.UI;
 
 public class Passenger : Script
@@ -86,6 +88,7 @@ public class Passenger : Script
     private DateTime timeAutoValidateMod = DateTime.Now;
     private DateTime timeAttemptedEnterVehicle = DateTime.Now;
     private Vehicle? targetVehicle;
+    private List<SeatNode> seatGraph = new List<SeatNode>();
     private ModState modState = ModState.Detached;
     private enum ModState : int
     {
@@ -143,6 +146,8 @@ public class Passenger : Script
             subtitle += $"targetVehicle: {this.targetVehicle}\n";
         subtitle += $"timeAutoValidateMod (s): {(DateTime.Now - this.timeAutoValidateMod).Seconds}\n";
         subtitle += $"timeAttemptedEnterVehicle (s): {(DateTime.Now - this.timeAttemptedEnterVehicle).Seconds}\n";
+        if (this.seatGraph.Count > 0)
+            subtitle += $"seatGraph: {this.seatGraph.Count}\n";
         GTA.UI.Screen.ShowSubtitle(subtitle, (int)this.settings["SETTINGS"]["Interval"]);
     }
 
@@ -150,6 +155,7 @@ public class Passenger : Script
     private ModState ResetMod()
     {
         this.targetVehicle = null;
+        this.seatGraph.Clear();
         this.timeAutoValidateMod = DateTime.Now;
         // this.timeAttemptedEnterVehicle = DateTime.Now; // Not necessary
         player.Task.ClearAll();
@@ -268,6 +274,7 @@ public class Passenger : Script
         if (player.IsInVehicle(this.targetVehicle))
         {
             if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG) Notification.PostTicker($"Entered vehicle.", true);
+            BuildSeatGraph(this.targetVehicle);
             return ModState.Seated;
         }
         // Keep attempting to enter vehicle
@@ -434,5 +441,69 @@ public class Passenger : Script
             }
         }
         return freeSeat;
+    }
+
+    // PASSENGER.SEATGRAPH /////////////////////////////////////////////////////
+    private static readonly Dictionary<int, string> SeatToSeatBoneName = new Dictionary<int, string> {
+        { (int)VehicleSeat.Driver,    "seat_dside_f"}, // VehicleSeat.LeftFront
+        { (int)VehicleSeat.Passenger, "seat_pside_f"}, // VehicleSeat.RightFront
+        { (int)VehicleSeat.LeftRear,  "seat_dside_r"},
+        { (int)VehicleSeat.RightRear, "seat_pside_r"},
+    };
+
+
+    private void BuildSeatGraph(Vehicle vehicle)
+    {
+        for (int i = 0; i < vehicle.PassengerCapacity; i++)
+        {
+            if (i == 0)
+            {
+                Vector3 offset = vehicle.Bones[SeatToSeatBoneName[0]].GetPositionOffset(vehicle.Position);
+                this.seatGraph.Add(new SeatNode((VehicleSeat)i, new Vector2(offset.X, offset.Y)));
+                continue;
+            }
+        }
+    }
+
+    private void ClearSeatGraph()
+    {
+        this.seatGraph.Clear();
+    }
+}
+
+public class SeatNode
+{
+    public VehicleSeat seat;
+    public Vector2 offset;
+
+    public SeatNode? seatUp;
+    public SeatNode? seatDown;
+    public SeatNode? seatLeft;
+    public SeatNode? seatRight;
+
+
+    public SeatNode(VehicleSeat seat, Vector2 offset)
+    {
+        this.seat = seat;
+        this.offset = offset;
+    }
+
+    private void AddSeatNode(SeatNode seatNode, string direction)
+    {
+        switch (direction)
+        {
+            case "up":
+                this.seatUp = seatNode;
+                break;
+            case "down":
+                this.seatDown = seatNode;
+                break;
+            case "left":
+                this.seatLeft = seatNode;
+                break;
+            case "right":
+                this.seatRight = seatNode;
+                break;
+        }
     }
 }
