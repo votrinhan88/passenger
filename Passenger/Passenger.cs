@@ -191,37 +191,45 @@ public class Passenger : Script
     {
         float distanceClosestVehicle = (float)this.settings["PARAMETERS"]["distanceClosestVehicle"];
         Ped player = Game.Player.Character;
-        this.targetVehicle = World.GetClosestVehicle(player.Position, distanceClosestVehicle);
+        Vehicle candidateVehicle = World.GetClosestVehicle(player.Position, distanceClosestVehicle);
         this.timeAttemptedEnterVehicle = DateTime.Now;
 
-        if (this.targetVehicle != null && this.targetVehicle.IsDriveable)
+        // Check: Candidate vehicle nearby
+        if (candidateVehicle == null)
         {
-            EnterVehicleFlags enterVehicleFlags;
-            VehicleSeat bestSeat;
-
-            VehicleSeat freeSeat = FindFirstFreePassengerSeat(this.targetVehicle);
-            if (freeSeat == VehicleSeat.None)
-            {
-                bestSeat = VehicleSeat.Passenger;
-                enterVehicleFlags = EnterVehicleFlags.None;
-            }
-            else
-            {
-                bestSeat = freeSeat;
-                enterVehicleFlags = EnterVehicleFlags.DontJackAnyone;
-            }
-
-            player.Task.EnterVehicle(
-                this.targetVehicle,
-                bestSeat,
-                -1,
-                2f,
-                enterVehicleFlags
-            );
-
-            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
-                Notification.PostTicker($"Attempt seat {bestSeat}.", true);
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG)
+                Notification.PostTicker("No vehicle found.", true);
+            return ResetMod();
         }
+        // Check: Candidate vehicle has passenger seat(s)
+        if (candidateVehicle.PassengerCapacity == 0)
+        {
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG)
+                Notification.PostTicker("No passenger seat available.", true);
+            return ResetMod();
+        }
+        
+        // Attempt to enter vehicle
+        this.targetVehicle = candidateVehicle;
+        EnterVehicleFlags enterVehicleFlags;
+        VehicleSeat bestSeat;
+
+        VehicleSeat freeSeat = FindFirstFreePassengerSeat(this.targetVehicle);
+        if (freeSeat == VehicleSeat.None)
+        {
+            bestSeat = VehicleSeat.Passenger;
+            enterVehicleFlags = EnterVehicleFlags.None;
+        }
+        else
+        {
+            bestSeat = freeSeat;
+            enterVehicleFlags = EnterVehicleFlags.DontJackAnyone;
+        }
+
+        player.Task.EnterVehicle(this.targetVehicle, bestSeat, -1, 2f, enterVehicleFlags);
+
+        if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+            Notification.PostTicker($"Attempt seat {bestSeat}.", true);
 
         return ModState.AttemptingEnter;
     }
