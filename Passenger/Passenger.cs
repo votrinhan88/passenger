@@ -313,8 +313,8 @@ public class Passenger : Script
             if (driver != null)
             {
                 if (driver.IsAlive & driver != player) {
-                    MakeDriverReckless(driver);
                     MakeDriverDriveOrCruise(driver);
+                    MakeDriverReckless(driver);
                 }
             }
         }
