@@ -1,6 +1,7 @@
 ﻿using System.Windows.Forms;
 using GTA;
 using GTA.Math;
+using GTA.Native;
 using GTA.UI;
 
 public class Passenger : Script
@@ -142,17 +143,26 @@ public class Passenger : Script
     {
         this.debugSubtitle = "";
         this.debugSubtitle += $"modState: {this.modState}\n";
-        if (this.targetVehicle != null)
-            this.debugSubtitle += $"targetVehicle: {this.targetVehicle}\n";
         // subtitle += $"timeAutoValidateMod (s): {(DateTime.Now - this.timeAutoValidateMod).Seconds}\n";
         // subtitle += $"timeAttemptedEnterVehicle (s): {(DateTime.Now - this.timeAttemptedEnterVehicle).Seconds}\n";
-        if (this.seatGraph.Count > 0)
+        if (this.targetVehicle != null)
         {
-            for (int i = 0; i < this.seatGraph.Count; i++)
-                this.debugSubtitle += $"seat[{i}/{this.seatGraph.Count}): {this.seatGraph.graph[i]}\n";
+            this.debugSubtitle += $"targetVehicle: {this.targetVehicle.DisplayName}\n";
+            string bones = "";
+            foreach (EntityBone bone in this.targetVehicle.Bones)
+            {
+                if (bone.Name.Contains("seat"))
+                    bones += $"{bone.Name}, ";
+            }
+            this.debugSubtitle += $"Bones: {bones}\n";
         }
+        // if (this.seatGraph.Count > 0)
+        // {
+        //     for (int i = 0; i < this.seatGraph.Count; i++)
+        //         this.debugSubtitle += $"seat[{i}/{this.seatGraph.Count}): {this.seatGraph.graph[i]}\n";
+        // }
 
-        GTA.UI.Screen.ShowSubtitle(this.debugSubtitle, (int)this.settings["SETTINGS"]["Interval"] - 10);
+        GTA.UI.Screen.ShowSubtitle(this.debugSubtitle, (int)this.settings["SETTINGS"]["Interval"]);
     }
 
     // PASSENGER ///////////////////////////////////////////////////////////////
@@ -348,14 +358,26 @@ public class Passenger : Script
 
             if (vehicle.IsSeatFree((VehicleSeat)idxNextSeat))
             {
-                player.Task.WarpIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
+                if (vehicle.IsMotorcycle)
+                {
+                    // Warping on motorbikes needs GodMode
+                    KnockOffVehicleType knockOffVehicleType = player.KnockOffVehicleType;
+                    player.KnockOffVehicleType = KnockOffVehicleType.Never;
+                    // Script.Wait(50);
+                    player.SetIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
+                    player.KnockOffVehicleType = knockOffVehicleType;
+                }
+                else
+                {
+                    player.SetIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
+                }
+
                 if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
                     Notification.PostTicker($"Switch to {(VehicleSeat)idxNextSeat}.", true);
                 return;
             }
         }
     }
-
     private void ThreatenOccupants()
     {
         bool notify = false;
@@ -393,7 +415,7 @@ public class Passenger : Script
             | VehicleDrivingFlags.DontSteerAroundPlayerPed
             | VehicleDrivingFlags.GoOffRoadWhenAvoiding
             | VehicleDrivingFlags.UseShortCutLinks
-            // | VehicleDrivingFlags.ChangeLanesAroundObstructions
+            | VehicleDrivingFlags.ChangeLanesAroundObstructions
             // | VehicleDrivingFlags.UseStringPullingAtJunctions
             | VehicleDrivingFlags.StopAtDestination
         );
@@ -422,7 +444,7 @@ public class Passenger : Script
             | VehicleDrivingFlags.DontSteerAroundPlayerPed
             | VehicleDrivingFlags.GoOffRoadWhenAvoiding
             | VehicleDrivingFlags.UseShortCutLinks
-            // | VehicleDrivingFlags.ChangeLanesAroundObstructions
+            | VehicleDrivingFlags.ChangeLanesAroundObstructions
             // | VehicleDrivingFlags.UseStringPullingAtJunctions
             | VehicleDrivingFlags.StopAtDestination
         ));
@@ -456,10 +478,14 @@ public class Passenger : Script
     // PASSENGER.SEATGRAPH /////////////////////////////////////////////////////
     public static readonly Dictionary<int, string> SeatToSeatBoneName = new Dictionary<int, string> {
         // Not correct for motorbikes
-        { (int)VehicleSeat.Driver,    "seat_dside_f"}, // VehicleSeat.LeftFront
-        { (int)VehicleSeat.Passenger, "seat_pside_f"}, // VehicleSeat.RightFront
-        { (int)VehicleSeat.LeftRear,  "seat_dside_r"},
-        { (int)VehicleSeat.RightRear, "seat_pside_r"},
+        { (int)VehicleSeat.Driver,     "seat_dside_f"}, // VehicleSeat.LeftFront
+        { (int)VehicleSeat.Passenger,  "seat_pside_f"}, // VehicleSeat.RightFront
+        { (int)VehicleSeat.LeftRear,   "seat_dside_r"},
+        { (int)VehicleSeat.RightRear,  "seat_pside_r"},
+        { (int)VehicleSeat.ExtraSeat1, "seat_dside_r1"},
+        { (int)VehicleSeat.ExtraSeat2, "seat_pside_r1"},
+        { (int)VehicleSeat.ExtraSeat3, "seat_dside_r2"},
+        { (int)VehicleSeat.ExtraSeat4, "seat_pside_r2"},
     };
 }
 
