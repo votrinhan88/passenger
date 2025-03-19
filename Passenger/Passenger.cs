@@ -27,9 +27,10 @@ public class Passenger : Script
         {
             "PARAMETERS", new Dictionary<string, object>
             {
-                {"distanceClosestVehicle",   10.0f},
-                {"timeoutAutoValidateMod",   10   },
-                {"timeoutEnterVehicle",       5   },
+                {"distanceClosestVehicle",             10.0f},
+                {"timeoutAutoValDetachedPassiveEnter", 10   },
+                {"timeoutAutoValSeatedPassiveExit",    10   },
+                {"timeoutEnterVehicle",                 5   },
             }
         },
     };
@@ -85,8 +86,9 @@ public class Passenger : Script
 
     // VARIABLES ///////////////////////////////////////////////////////////////
     private static Ped player => Game.Player.Character;
-    private DateTime timeAutoValidateMod = DateTime.Now;
-    private DateTime timeAttemptedEnterVehicle = DateTime.Now;
+    private DateTime timeAutoValDetachedPassiveEnter = DateTime.Now - TimeSpan.FromSeconds(10);
+    private DateTime timeAutoValSeatedPassiveExit = DateTime.Now - TimeSpan.FromSeconds(10);
+    private DateTime timeAttemptedEnterVehicle = DateTime.Now - TimeSpan.FromSeconds(10);
     private Vehicle? targetVehicle;
     private SeatGraph seatGraph = new SeatGraph();
     private ModState modState = ModState.Detached;
@@ -115,11 +117,14 @@ public class Passenger : Script
 
         switch (this.modState)
         {
+            case ModState.Detached:
+                this.modState = AutoValDetached();
+                break;
             case ModState.AttemptingEnter:
                 this.modState = CheckEnterSuccessful();
                 break;
             case ModState.Seated:
-                this.modState = AutoValidateMod();
+                this.modState = AutoValSeated();
                 break;
         }
     }
@@ -142,17 +147,20 @@ public class Passenger : Script
     private void ShowDebugInfo()
     {
         this.debugSubtitle = "";
-        this.debugSubtitle += $"modState: {this.modState}\n";
-        // subtitle += $"timeAutoValidateMod (s): {(DateTime.Now - this.timeAutoValidateMod).Seconds}\n";
-        // subtitle += $"timeAttemptedEnterVehicle (s): {(DateTime.Now - this.timeAttemptedEnterVehicle).Seconds}\n";
+        this.debugSubtitle += $"modState={this.modState}\n";
+        this.debugSubtitle += (
+            $"avD={(DateTime.Now - this.timeAutoValDetachedPassiveEnter).Seconds}s, " +
+            $"avA={(DateTime.Now - this.timeAttemptedEnterVehicle).Seconds}s, " +
+            $"avS={(DateTime.Now - this.timeAutoValSeatedPassiveExit).Seconds}s\n"
+        );
         if (this.targetVehicle != null)
         {
-            this.debugSubtitle += $"targetVehicle: {this.targetVehicle.DisplayName}\n";
+            this.debugSubtitle += $"V={this.targetVehicle.DisplayName}, KO={player.KnockOffVehicleType}\n";
             string bones = "";
             foreach (EntityBone bone in this.targetVehicle.Bones)
             {
                 if (bone.Name.Contains("seat"))
-                    bones += $"{bone.Name}, ";
+                    bones += $"{bone.Name.Replace("seat", "*")}, ";
             }
             this.debugSubtitle += $"Bones: {bones}\n";
         }
@@ -166,17 +174,38 @@ public class Passenger : Script
     }
 
     // PASSENGER ///////////////////////////////////////////////////////////////
-    private ModState ResetMod()
+    private ModState SoftReset()
     {
-        this.targetVehicle = null;
+        this.targetVehicle = (Vehicle?)player.CurrentVehicle;
         this.seatGraph.Clear();
-        this.timeAutoValidateMod = DateTime.Now;
+        // this.timeAutoValDetachedPassiveEnter = DateTime.Now; // Don't reset
+        // this.timeAutoValSeatedPassiveExit = DateTime.Now; // Don't reset
         // this.timeAttemptedEnterVehicle = DateTime.Now; // Not necessary
+        player.KnockOffVehicleType = KnockOffVehicleType.Default;
         player.Task.ClearAll();
         return ModState.Detached;
     }
 
-    private ModState AutoValidateMod()
+    private ModState AutoValDetached()
+    {
+        // Check: Timeout
+        if ((DateTime.Now - this.timeAutoValDetachedPassiveEnter).Seconds < (int)settings["PARAMETERS"]["timeoutAutoValDetachedPassiveEnter"])
+            return this.modState;
+        this.timeAutoValDetachedPassiveEnter = DateTime.Now;
+
+        // If player is already in vehicle, shortcut straight to interact ModState.Seated
+        if (player.IsInVehicle())
+        {
+            this.targetVehicle = player.CurrentVehicle;
+            this.seatGraph.Build(this.targetVehicle);
+            return ModState.Seated;
+        }
+        this.targetVehicle = null;
+        this.seatGraph.Clear();
+        return ModState.Detached;
+    }
+
+    private ModState AutoValSeated()
     {
         // Check: Player actively exited target vehicle
         if (
@@ -186,22 +215,29 @@ public class Passenger : Script
         {
             if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG)
                 Notification.PostTicker("Player actively exited vehicle.", true);
-            return ResetMod();
+            return SoftReset();
         }
 
-        // Check: Player not in target vehicle by Timeout
-        if ((DateTime.Now - this.timeAutoValidateMod).Seconds > (int)settings["PARAMETERS"]["timeoutAutoValidateMod"])
+
+        // Passive validation
+        if ((DateTime.Now - this.timeAutoValSeatedPassiveExit).Seconds > (int)settings["PARAMETERS"]["timeoutAutoValSeatedPassiveExit"])
         {
-            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG)
-                Notification.PostTicker("AutoValidateMod timer reset.", true);
-            this.timeAutoValidateMod = DateTime.Now;
+            this.timeAutoValSeatedPassiveExit = DateTime.Now;
             {
+                // Check: Player passively exited vehicle by Timeout
+                // E.g.: By being knocked off driver, jacked out, etc.
                 // Check: Target vehicle is not null
                 if (this.targetVehicle == null)
-                    return ResetMod();
+                    return SoftReset();
                 // Check: Player is in target vehicle
                 if (!player.IsInVehicle(this.targetVehicle))
-                    return ResetMod();
+                    return SoftReset();
+
+                // Check: Player is a bike passenger, then turn off KnockOff
+                if (this.targetVehicle.IsMotorcycle && (player.SeatIndex != VehicleSeat.Driver))
+                    player.KnockOffVehicleType = KnockOffVehicleType.Never;
+                else
+                    player.KnockOffVehicleType = KnockOffVehicleType.Default;
             }
         }
         return this.modState;
@@ -218,19 +254,19 @@ public class Passenger : Script
         {
             if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG)
                 Notification.PostTicker("No vehicle found.", true);
-            return ResetMod();
+            return SoftReset();
         }
         // Check: Candidate vehicle has passenger seat(s)
         if (candidateVehicle.PassengerCapacity == 0)
         {
             if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG)
                 Notification.PostTicker("No passenger seat available.", true);
-            return ResetMod();
+            return SoftReset();
         }
 
 
         this.targetVehicle = candidateVehicle;
-        // If player is already in vehicle, skip straight to interact
+        // If player is already in vehicle, shortcut straight to interact
         if (player.IsInVehicle(candidateVehicle))
         {
             this.modState = CheckEnterSuccessful();
@@ -254,13 +290,14 @@ public class Passenger : Script
             enterVehicleFlags = EnterVehicleFlags.DontJackAnyone;
         }
 
-            player.Task.EnterVehicle(
-                this.targetVehicle,
-                bestSeat,
-                -1,
-                speed,
-                enterVehicleFlags
-            );
+        // Attempt to enter vehicle. KnockOffVehicleType will be handled in AutoValSeated
+        player.Task.EnterVehicle(
+            this.targetVehicle,
+            bestSeat,
+            -1,
+            speed,
+            enterVehicleFlags
+        );
 
         if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
             Notification.PostTicker($"Attempt seat {bestSeat}.", true);
@@ -273,23 +310,23 @@ public class Passenger : Script
         // Check: Target vehicle is not null
         if (this.targetVehicle == null)
         {
-            return ResetMod();
+            return SoftReset();
         }
         // Check: Target vehicle still exists (in game)
         if (!this.targetVehicle.Exists())
         {
-            return ResetMod();
+            return SoftReset();
         }
         // Check: Target vehicle is still closeby (in game)
         if ((this.targetVehicle.Position - player.Position).Length() > 4 * (float)this.settings["PARAMETERS"]["distanceClosestVehicle"])
         {
-            return ResetMod();
+            return SoftReset();
         }
         // Check: Timeout
         if ((DateTime.Now - this.timeAttemptedEnterVehicle).Seconds > (int)this.settings["PARAMETERS"]["timeoutEnterVehicle"])
         {
             if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.DEBUG) Notification.PostTicker("Timeout entering vehicle.", true);
-            return ResetMod();
+            return SoftReset();
         }
 
         // Succesfully entered vehicle
@@ -307,12 +344,12 @@ public class Passenger : Script
     {
         // Check: Target vehicle is not null
         if (this.targetVehicle == null)
-            return ResetMod();
+            return SoftReset();
         // Check: Player is in target vehicle
         if (!player.IsInVehicle(this.targetVehicle))
-            return ResetMod();
+            return SoftReset();
 
-        this.timeAutoValidateMod = DateTime.Now;
+        this.timeAutoValSeatedPassiveExit = DateTime.Now;
         // Interact as passenger
         if (!player.IsAiming == true)
             CycleFreeSeatsWhileOnVehicle();
@@ -347,37 +384,41 @@ public class Passenger : Script
         // Find next free seat
         for (int i = 0; i < vehicle.PassengerCapacity + 1; i++)
         {
+            // Re-index as a shifted circular queue
             if (idxNextSeat + 1 <= vehicle.PassengerCapacity)
-            {
                 idxNextSeat = idxNextSeat + 1;
-            }
             else
-            {
                 idxNextSeat = (int)VehicleSeat.Driver;
-            }
 
-            if (vehicle.IsSeatFree((VehicleSeat)idxNextSeat))
+            // Check: Next seat is free
+            if (!vehicle.IsSeatFree((VehicleSeat)idxNextSeat))
+                continue;
+
+            if (vehicle.IsMotorcycle)
             {
-                if (vehicle.IsMotorcycle)
+                if (idxNextSeat != (int)VehicleSeat.Driver)
                 {
-                    // Warping on motorbikes needs GodMode
-                    KnockOffVehicleType knockOffVehicleType = player.KnockOffVehicleType;
+                    // Staying on motorbikes Passenger seat needs temporary GodMode
                     player.KnockOffVehicleType = KnockOffVehicleType.Never;
-                    // Script.Wait(50);
-                    player.SetIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
-                    player.KnockOffVehicleType = knockOffVehicleType;
+                    player.Task.WarpIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
                 }
                 else
                 {
-                    player.SetIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
+                    player.KnockOffVehicleType = KnockOffVehicleType.Default;
+                    player.Task.WarpIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
                 }
-
-                if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
-                    Notification.PostTicker($"Switch to {(VehicleSeat)idxNextSeat}.", true);
-                return;
             }
+            else
+            {
+                player.Task.WarpIntoVehicle(vehicle, (VehicleSeat)idxNextSeat);
+            }
+
+            if ((int)this.settings["SETTINGS"]["verbose"] >= Verbosity.INFO)
+                Notification.PostTicker($"Switch to {(VehicleSeat)idxNextSeat}.", true);
+            return;
         }
     }
+
     private void ThreatenOccupants()
     {
         bool notify = false;
